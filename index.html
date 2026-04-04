@@ -1,0 +1,1594 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Quickselect Visualizer — BCS 309</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Sora:wght@300;400;600;700&display=swap');
+
+  :root {
+    --bg:       #0d0f14;
+    --panel:    #131720;
+    --card:     #1a1f2e;
+    --border:   #252d40;
+    --accent:   #4f9cf9;
+    --accent2:  #8b5cf6;
+    --green:    #22c55e;
+    --red:      #ef4444;
+    --yellow:   #f59e0b;
+    --orange:   #f97316;
+    --pivot-c:  #f59e0b;
+    --compare-c:#4f9cf9;
+    --swap-c:   #f97316;
+    --found-c:  #22c55e;
+    --discard-c:#374151;
+    --active-c: #8b5cf6;
+    --text:     #e2e8f0;
+    --muted:    #64748b;
+    --mono:     'JetBrains Mono', monospace;
+    --sans:     'Sora', sans-serif;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html { font-size: 14px; }
+  body { background: var(--bg); color: var(--text); font-family: var(--sans); min-height: 100vh; }
+
+  /* ── TOP BAR ── */
+  header {
+    background: var(--panel);
+    border-bottom: 1px solid var(--border);
+    padding: 10px 20px;
+    display: flex; align-items: center; gap: 12px;
+  }
+  header h1 { font-size: 1.1rem; font-weight: 700; color: var(--accent); letter-spacing: .02em; }
+  header span { font-size: .8rem; color: var(--muted); }
+  .badge { background: var(--accent2); color: #fff; font-size: .68rem; padding: 2px 8px; border-radius: 99px; font-weight: 600; }
+
+  /* ── TWO-COLUMN LAYOUT ── */
+  .main-wrap {
+    display: grid;
+    grid-template-columns: 420px 1fr;
+    height: calc(100vh - 48px);
+    overflow: hidden;
+  }
+  @media (max-width: 980px) {
+    .main-wrap { grid-template-columns: 1fr; height: auto; overflow: auto; }
+    .left-panel { overflow: visible !important; border-right: none !important; border-bottom: 1px solid var(--border); }
+    .right-panel { overflow: visible !important; }
+  }
+
+  /* ── LEFT PANEL ── */
+  .left-panel {
+    background: var(--panel);
+    border-right: 1px solid var(--border);
+    overflow-y: auto;
+    padding: 14px;
+    display: flex; flex-direction: column; gap: 12px;
+  }
+  .section-title {
+    font-size: .7rem; font-weight: 700; text-transform: uppercase; letter-spacing: .1em;
+    color: var(--muted); margin-bottom: 6px;
+  }
+  .card { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 12px; }
+  input[type=text], input[type=number] {
+    width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+    color: var(--text); font-family: var(--mono); font-size: .82rem; padding: 7px 10px;
+    outline: none;
+  }
+  input:focus { border-color: var(--accent); }
+  label { font-size: .8rem; color: var(--muted); display: block; margin-bottom: 4px; }
+
+  .preset-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 6px; }
+  .btn-preset {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+    color: var(--text); font-size: .72rem; padding: 5px 4px; cursor: pointer; text-align: center;
+    transition: border-color .15s, color .15s;
+  }
+  .btn-preset:hover { border-color: var(--accent); color: var(--accent); }
+
+  /* speed slider */
+  .speed-wrap { display: flex; align-items: center; gap: 8px; }
+  input[type=range] {
+    flex: 1; -webkit-appearance: none; height: 4px;
+    background: var(--border); border-radius: 2px; outline: none; cursor: pointer;
+  }
+  input[type=range]::-webkit-slider-thumb {
+    -webkit-appearance: none; width: 14px; height: 14px;
+    background: var(--accent); border-radius: 50%;
+  }
+  .speed-label { font-family: var(--mono); font-size: .78rem; color: var(--accent); min-width: 36px; }
+
+  /* playback buttons */
+  .pb-grid { display: grid; grid-template-columns: repeat(5,1fr); gap: 6px; }
+  .btn-pb {
+    background: var(--bg); border: 1px solid var(--border); border-radius: 6px;
+    color: var(--text); font-size: .7rem; padding: 6px 2px; cursor: pointer;
+    transition: background .15s, border-color .15s, color .15s; text-align: center;
+  }
+  .btn-pb:hover { background: var(--border); }
+  .btn-pb.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  .btn-pb.primary:hover { background: #3b82f6; }
+  .btn-pb:disabled { opacity: .35; cursor: not-allowed; }
+
+  /* status strip */
+  .status-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+  .stat-box { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 7px 10px; }
+  .stat-box .val { font-family: var(--mono); font-size: 1rem; color: var(--accent); font-weight: 600; }
+  .stat-box .lbl { font-size: .65rem; color: var(--muted); text-transform: uppercase; }
+
+  /* counters */
+  .counter-grid { display: grid; grid-template-columns: repeat(3,1fr); gap: 6px; }
+  .ctr-box { background: var(--bg); border: 1px solid var(--border); border-radius: 6px; padding: 7px; text-align: center; }
+  .ctr-box .cval { font-family: var(--mono); font-size: 1.1rem; font-weight: 700; color: var(--accent2); }
+  .ctr-box .clbl { font-size: .62rem; color: var(--muted); margin-top: 2px; }
+
+  /* pseudocode */
+  .pseudo-wrap { max-height: 210px; overflow-y: auto; position: relative; }
+  .pseudo-line {
+    display: flex; gap: 8px; padding: 3px 6px; border-radius: 4px;
+    cursor: default; transition: background .1s; font-family: var(--mono); font-size: .75rem;
+    align-items: flex-start;
+  }
+  .pseudo-line:hover { background: rgba(79,156,249,.08); }
+  .pseudo-line.active { background: rgba(79,156,249,.2); border-left: 3px solid var(--accent); }
+  .pseudo-line .ln { color: var(--muted); min-width: 20px; user-select: none; }
+  .pseudo-line .code { color: var(--text); flex: 1; }
+
+  /* floating tooltip — fixed to viewport, always on top */
+  #pseudo-tooltip {
+    display: none;
+    position: fixed;
+    z-index: 99999;
+    background: #1e2a3a;
+    border: 1px solid var(--accent);
+    border-radius: 8px;
+    padding: 8px 13px;
+    font-size: .76rem;
+    font-family: var(--sans);
+    color: var(--text);
+    max-width: 280px;
+    white-space: normal;
+    pointer-events: none;
+    box-shadow: 0 8px 32px rgba(0,0,0,.8), 0 0 0 1px rgba(79,156,249,.15);
+    line-height: 1.55;
+    transform: translateZ(0); /* force own compositing layer */
+  }
+  #pseudo-tooltip::before {
+    content: '💡 ';
+  }
+
+  /* step explanation */
+  .explain-box {
+    background: var(--bg); border: 1px solid var(--accent); border-radius: 6px;
+    padding: 9px 12px; font-size: .8rem; line-height: 1.55; color: var(--text);
+    min-height: 48px; border-left: 3px solid var(--accent);
+  }
+
+  /* history table */
+  .hist-wrap { max-height: 150px; overflow-y: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: .72rem; }
+  th { background: var(--bg); color: var(--muted); padding: 4px 6px; text-align: left; position: sticky; top: 0; }
+  td { padding: 3px 6px; border-bottom: 1px solid var(--border); cursor: pointer; }
+  tr:hover td { background: rgba(79,156,249,.07); }
+  tr.hist-active td { background: rgba(79,156,249,.18); }
+
+  /* ── RIGHT PANEL ── */
+  .right-panel {
+    overflow-y: auto;
+    display: flex; flex-direction: column; gap: 0;
+  }
+
+  .viz-section {
+    padding: 14px 16px;
+    border-bottom: 1px solid var(--border);
+  }
+  .viz-section-title {
+    font-size: .72rem; font-weight: 700; text-transform: uppercase; letter-spacing: .12em;
+    color: var(--muted); margin-bottom: 10px; display: flex; align-items: center; gap: 8px;
+  }
+  .viz-section-title span { color: var(--accent); }
+
+  /* BAR CHART */
+  #bar-svg { width: 100%; display: block; }
+  .bar-container { background: var(--card); border: 1px solid var(--border); border-radius: 8px; overflow: hidden; }
+
+  /* Legend */
+  .legend { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px; }
+  .leg-item { display: flex; align-items: center; gap: 5px; font-size: .7rem; color: var(--muted); }
+  .leg-dot { width: 10px; height: 10px; border-radius: 2px; flex-shrink: 0; }
+
+  /* Recursion tree */
+  #tree-svg { width: 100%; display: block; }
+
+  /* Complexity chart */
+  #cmp-svg { width: 100%; height: 220px; display: block; }
+
+  /* Educational accordion */
+  .edu-section { border-bottom: 1px solid var(--border); }
+  .edu-header {
+    padding: 12px 16px; cursor: pointer; display: flex; justify-content: space-between;
+    align-items: center; font-weight: 600; font-size: .85rem; user-select: none;
+    transition: background .15s;
+  }
+  .edu-header:hover { background: var(--card); }
+  .edu-chevron { transition: transform .25s; }
+  .edu-header.open .edu-chevron { transform: rotate(180deg); }
+  .edu-body { display: none; padding: 12px 16px; font-size: .82rem; line-height: 1.65; }
+  .edu-body.open { display: block; }
+  .edu-body p { margin-bottom: 8px; color: #cbd5e1; }
+  .edu-body strong { color: var(--accent); }
+  .key-concept {
+    background: rgba(79,156,249,.1); border-left: 3px solid var(--accent);
+    border-radius: 4px; padding: 8px 12px; margin: 8px 0; font-size: .8rem;
+  }
+  .warn-concept {
+    background: rgba(239,68,68,.1); border-left: 3px solid var(--red);
+    border-radius: 4px; padding: 8px 12px; margin: 8px 0; font-size: .8rem;
+  }
+  .worked-step { margin: 6px 0; padding: 7px 10px; background: var(--card); border-radius: 6px; font-size: .78rem; }
+  .complexity-table { width: 100%; border-collapse: collapse; font-size: .78rem; margin: 8px 0; }
+  .complexity-table th, .complexity-table td { border: 1px solid var(--border); padding: 5px 8px; }
+  .complexity-table th { background: var(--bg); color: var(--accent); }
+
+  /* call stack */
+  #call-stack { display: flex; flex-direction: column-reverse; gap: 4px; min-height: 32px; }
+  .stack-frame {
+    background: var(--card); border: 1px solid var(--border); border-radius: 4px;
+    padding: 4px 10px; font-family: var(--mono); font-size: .72rem;
+    transition: background .2s;
+  }
+  .stack-frame.top { border-color: var(--accent); background: rgba(79,156,249,.12); }
+
+  /* scrollbar */
+  ::-webkit-scrollbar { width: 6px; height: 6px; }
+  ::-webkit-scrollbar-track { background: var(--bg); }
+  ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
+
+  /* tabs */
+  .tabs { display: flex; gap: 2px; border-bottom: 1px solid var(--border); padding: 0 16px; }
+  .tab-btn {
+    background: none; border: none; color: var(--muted); font-size: .78rem;
+    padding: 8px 14px; cursor: pointer; border-bottom: 2px solid transparent;
+    font-family: var(--sans); transition: color .15s, border-color .15s;
+  }
+  .tab-btn.active { color: var(--accent); border-bottom-color: var(--accent); }
+  .tab-pane { display: none; }
+  .tab-pane.active { display: block; }
+
+  .info-row { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 4px; }
+  .info-chip {
+    background: var(--card); border: 1px solid var(--border); border-radius: 4px;
+    font-size: .7rem; padding: 3px 8px; font-family: var(--mono);
+  }
+  .info-chip .ic-lbl { color: var(--muted); margin-right: 4px; }
+  .info-chip .ic-val { color: var(--accent2); font-weight: 600; }
+
+  /* ── LECTURE BODY ── */
+  .lecture-body { padding: 20px 24px; max-width: 860px; }
+  .lec-section { margin-bottom: 28px; }
+  .lec-h2 {
+    font-size: .95rem; font-weight: 700; color: var(--text);
+    margin-bottom: 10px; padding-bottom: 6px;
+    border-bottom: 1px solid var(--border);
+    letter-spacing: .01em;
+  }
+  .lec-p {
+    font-size: .84rem; line-height: 1.75; color: #cbd5e1;
+    margin-bottom: 10px;
+  }
+  .lec-p code, .lec-p strong { color: var(--text); }
+  .lec-p em { color: var(--accent); font-style: normal; }
+  .lec-list {
+    list-style: none; padding: 0; margin: 8px 0 12px 0;
+    display: flex; flex-direction: column; gap: 6px;
+  }
+  .lec-list li {
+    font-size: .83rem; color: #cbd5e1; line-height: 1.6;
+    padding-left: 18px; position: relative;
+  }
+  .lec-list li::before {
+    content: '▸'; color: var(--accent); position: absolute; left: 0;
+  }
+  .lec-callout {
+    border-radius: 8px; padding: 12px 16px;
+    font-size: .82rem; line-height: 1.65; margin-bottom: 14px;
+  }
+  .lec-blue  { background: rgba(79,156,249,.1);  border-left: 3px solid var(--accent);  color: #cbd5e1; }
+  .lec-green { background: rgba(34,197,94,.1);   border-left: 3px solid var(--green);   color: #cbd5e1; }
+  .lec-yellow{ background: rgba(245,158,11,.1);  border-left: 3px solid var(--yellow);  color: #cbd5e1; }
+  .lec-red   { background: rgba(239,68,68,.1);   border-left: 3px solid var(--red);     color: #cbd5e1; }
+  .lec-callout strong { color: var(--text); }
+  .lec-steps { display: flex; flex-direction: column; gap: 8px; margin: 12px 0; }
+  .lec-step {
+    display: flex; gap: 12px; align-items: flex-start;
+    background: var(--card); border: 1px solid var(--border);
+    border-radius: 7px; padding: 10px 14px; font-size: .82rem; color: #cbd5e1; line-height: 1.6;
+  }
+  .lec-step-found { border-color: var(--green); background: rgba(34,197,94,.08); }
+  .lec-step-num {
+    background: var(--accent); color: #fff; border-radius: 50%;
+    min-width: 22px; height: 22px; display: flex; align-items: center;
+    justify-content: center; font-size: .72rem; font-weight: 700; flex-shrink: 0; margin-top: 1px;
+  }
+  .lec-step-found .lec-step-num { background: var(--green); }
+  .lec-btn {
+    display: inline-block; background: var(--accent); color: #fff;
+    border: none; border-radius: 7px; padding: 8px 18px;
+    font-size: .82rem; font-family: var(--sans); cursor: pointer;
+    margin-right: 8px; margin-bottom: 8px; transition: background .15s;
+  }
+  .lec-btn:hover { background: #3b82f6; }
+  .lec-btn-outline {
+    background: transparent; border: 1px solid var(--border); color: var(--text);
+  }
+  .lec-btn-outline:hover { background: var(--card); }
+
+  /* Wider tabs for 6 items */
+  .tabs { flex-wrap: wrap; }
+  .tab-btn { font-size: .74rem; padding: 8px 10px; }
+</style>
+</head>
+<body>
+<div id="pseudo-tooltip"></div>
+
+<header>
+  <h1>⚡ Quickselect</h1>
+  <span style="font-size:.8rem;color:var(--muted)">Interactive Learning Tool</span>
+</header>
+
+<div class="main-wrap">
+
+<!-- ════════════════════════ LEFT PANEL ════════════════════════ -->
+<div class="left-panel">
+
+  <!-- INPUT -->
+  <div class="card">
+    <div class="section-title">Input</div>
+    <label>Array (comma-separated)</label>
+    <input type="text" id="inp-array" value="3,6,8,5,2,7,1,4" />
+    <label style="margin-top:8px">k (find k-th smallest, 1-indexed)</label>
+    <input type="number" id="inp-k" value="4" min="1" />
+  </div>
+
+  <!-- PRESETS -->
+  <div class="card">
+    <div class="section-title">Preset Examples</div>
+    <div class="preset-grid">
+      <button class="btn-preset" onclick="loadPreset(0)">📦 Basic<br/><small>8 elements</small></button>
+      <button class="btn-preset" onclick="loadPreset(1)">☠️ Worst Case<br/><small>sorted+bad pivot</small></button>
+      <button class="btn-preset" onclick="loadPreset(2)">🎲 Random<br/><small>12 elements</small></button>
+      <button class="btn-preset" onclick="loadPreset(3)">🔁 Duplicates<br/><small>repeated vals</small></button>
+      <button class="btn-preset" onclick="loadPreset(4)">📉 Reverse<br/><small>descending</small></button>
+      <button class="btn-preset" onclick="loadPreset(5)">🔍 Median<br/><small>find mid</small></button>
+    </div>
+  </div>
+
+  <!-- SPEED -->
+  <div class="card">
+    <div class="section-title">Speed</div>
+    <div class="speed-wrap">
+      <span style="font-size:.72rem;color:var(--muted)">0.25×</span>
+      <input type="range" id="speed-slider" min="1" max="16" value="4" step="1" oninput="updateSpeed()" />
+      <span style="font-size:.72rem;color:var(--muted)">4×</span>
+      <span class="speed-label" id="speed-label">1.0×</span>
+    </div>
+  </div>
+
+  <!-- PLAYBACK -->
+  <div class="card">
+    <div class="section-title">Playback</div>
+    <div class="pb-grid">
+      <button class="btn-pb primary" id="btn-build" onclick="buildSteps()">Build<br/>Steps</button>
+      <button class="btn-pb" id="btn-step" onclick="stepFwd()" disabled>Step</button>
+      <button class="btn-pb" id="btn-play" onclick="playAnim()" disabled>▶ Play</button>
+      <button class="btn-pb" id="btn-pause" onclick="pauseAnim()" disabled>⏸ Pause</button>
+      <button class="btn-pb" id="btn-reset" onclick="resetAll()">↺ Reset</button>
+    </div>
+  </div>
+
+  <!-- STATUS / STEP -->
+  <div class="card">
+    <div class="status-grid">
+      <div class="stat-box">
+        <div class="val" id="step-counter">0 / 0</div>
+        <div class="lbl">Step</div>
+      </div>
+      <div class="stat-box">
+        <div class="val" id="status-lbl" style="color:var(--muted)">Idle</div>
+        <div class="lbl">Status</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- COUNTERS -->
+  <div class="card">
+    <div class="section-title">Live Counters</div>
+    <div class="counter-grid">
+      <div class="ctr-box"><div class="cval" id="cnt-cmp">0</div><div class="clbl">Comparisons</div></div>
+      <div class="ctr-box"><div class="cval" id="cnt-swp">0</div><div class="clbl">Swaps</div></div>
+      <div class="ctr-box"><div class="cval" id="cnt-part">0</div><div class="clbl">Partitions</div></div>
+    </div>
+  </div>
+
+  <!-- PSEUDOCODE -->
+  <div class="card">
+    <div class="section-title">Pseudocode — Hover for tooltip</div>
+    <div class="pseudo-wrap" id="pseudo-wrap"></div>
+  </div>
+
+  <!-- STEP EXPLANATION -->
+  <div class="card">
+    <div class="section-title">Step Explanation</div>
+    <div class="explain-box" id="explain-box">Click <strong>Build Steps</strong>, then <strong>Step</strong> or <strong>Play</strong> to see line-by-line explanations.</div>
+  </div>
+
+  <!-- HISTORY -->
+  <div class="card">
+    <div class="section-title">Step History (click to jump)</div>
+    <div class="hist-wrap">
+      <table id="hist-table">
+        <thead><tr><th>#</th><th>Action</th><th>Pivot</th><th>Cmps</th></tr></thead>
+        <tbody id="hist-body"></tbody>
+      </table>
+    </div>
+  </div>
+
+</div>
+<!-- end left panel -->
+
+<!-- ════════════════════════ RIGHT PANEL ════════════════════════ -->
+<div class="right-panel">
+
+  <!-- ── ALWAYS-VISIBLE VISUALIZATIONS (TOP) ── -->
+  <div class="viz-section">
+    <div class="viz-section-title">Main Visualization — <span id="viz-title">Bar Chart · Quickselect</span></div>
+    <div class="bar-container">
+      <svg id="bar-svg" height="280"></svg>
+    </div>
+    <!-- Legend -->
+    <div class="legend">
+      <div class="leg-item"><div class="leg-dot" style="background:var(--accent)"></div>Active Search Range</div>
+      <div class="leg-item"><div class="leg-dot" style="background:var(--pivot-c)"></div>Pivot</div>
+      <div class="leg-item"><div class="leg-dot" style="background:var(--compare-c)"></div>Comparing (i/j)</div>
+      <div class="leg-item"><div class="leg-dot" style="background:var(--swap-c)"></div>Swapping</div>
+      <div class="leg-item"><div class="leg-dot" style="background:var(--found-c)"></div>Found (k-th)</div>
+      <div class="leg-item"><div class="leg-dot" style="background:var(--discard-c)"></div>Discarded</div>
+    </div>
+    <!-- Info row -->
+    <div class="info-row" id="info-row">
+      <div class="info-chip"><span class="ic-lbl">k =</span><span class="ic-val" id="ic-k">—</span></div>
+      <div class="info-chip"><span class="ic-lbl">lo =</span><span class="ic-val" id="ic-lo">—</span></div>
+      <div class="info-chip"><span class="ic-lbl">hi =</span><span class="ic-val" id="ic-hi">—</span></div>
+      <div class="info-chip"><span class="ic-lbl">pivot idx =</span><span class="ic-val" id="ic-piv">—</span></div>
+      <div class="info-chip"><span class="ic-lbl">pivot val =</span><span class="ic-val" id="ic-pivv">—</span></div>
+      <div class="info-chip"><span class="ic-lbl">result =</span><span class="ic-val" id="ic-res">—</span></div>
+    </div>
+  </div>
+
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:0;border-bottom:1px solid var(--border)">
+    <div class="viz-section" style="border-right:1px solid var(--border)">
+      <div class="viz-section-title">Recursion Tree — <span>One path, not a full tree (D&amp;C)</span></div>
+      <div class="bar-container" style="min-height:80px; max-height:220px; overflow-y:auto;">
+        <svg id="tree-svg" height="120"></svg>
+      </div>
+    </div>
+    <div class="viz-section">
+      <div class="viz-section-title">Call Stack</div>
+      <div id="call-stack"><div style="color:var(--muted);font-size:.75rem">No active call</div></div>
+    </div>
+  </div>
+
+  <!-- ── TABS ── -->
+  <div class="tabs">
+    <button class="tab-btn active" onclick="switchTab('intro')">📖 What is Quickselect?</button>
+    <button class="tab-btn" onclick="switchTab('howit')">⚙️ How It Works</button>
+    <button class="tab-btn" onclick="switchTab('complexity')">📈 Complexity</button>
+    <button class="tab-btn" onclick="switchTab('dnc')">🌿 Divide &amp; Conquer</button>
+    <button class="tab-btn" onclick="switchTab('compare')">⚖️ Comparisons</button>
+    <button class="tab-btn" onclick="switchTab('tips')">💡 Key Concepts</button>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════ -->
+  <!-- TAB 1 — WHAT IS QUICKSELECT                           -->
+  <!-- ══════════════════════════════════════════════════════ -->
+  <div class="tab-pane active" id="tab-intro">
+    <div class="lecture-body">
+
+      <div class="lec-section">
+        <h2 class="lec-h2">The Problem We Are Solving</h2>
+        <p class="lec-p">Imagine you have a shuffled list of numbers: <code>[3, 6, 8, 5, 2, 7, 1, 4]</code>. Someone asks you — <em>"What is the 4th smallest number?"</em></p>
+        <p class="lec-p">The obvious answer is to sort the list first and then pick the 4th element. Sorting gives you <code>[1, 2, 3, <strong>4</strong>, 5, 6, 7, 8]</code> — the answer is 4. That works. But here is the problem: <strong>you sorted the entire list just to answer one question.</strong> If your list has a million numbers, you did a million steps of unnecessary work.</p>
+        <p class="lec-p">This is called the <strong>Selection Problem</strong> — given an unsorted list of n elements, find the k-th smallest element as efficiently as possible.</p>
+      </div>
+
+      <div class="lec-callout lec-blue">
+        <strong>Definition:</strong> The <strong>k-th smallest element</strong> (also called the k-th order statistic) is the element that would appear at position k if the array were sorted. k = 1 means the minimum. k = n means the maximum. k = n/2 means the median.
+      </div>
+
+      <div class="lec-section">
+        <h2 class="lec-h2">What is Quickselect?</h2>
+        <p class="lec-p"><strong>Quickselect</strong> is an algorithm invented by Tony Hoare in 1961 that solves the Selection Problem in <strong>expected O(n) time</strong> — without sorting the whole array.</p>
+        <p class="lec-p">It is not a sorting algorithm. It is not a searching algorithm. It is a <strong>selection algorithm</strong> — its only job is to find one specific rank in an unsorted list and return it.</p>
+      </div>
+
+      <div class="lec-section">
+        <h2 class="lec-h2">Why Not Just Sort?</h2>
+        <p class="lec-p">Sorting costs <strong>O(n log n)</strong> in the best case for comparison-based sorting. That means for 1,000 elements you do roughly 10,000 operations. For 1,000,000 elements you do roughly 20,000,000 operations.</p>
+        <p class="lec-p">Quickselect on average costs <strong>O(n)</strong>. For 1,000,000 elements, that is roughly 1,000,000 operations — 20 times less work. And you get the exact same answer.</p>
+        <p class="lec-p">The key insight is this: <em>when you sort, you are ordering every element relative to every other element. But to find one rank, you do not need all of that information.</em> You only need to know: is the answer to the left or to the right of some dividing point?</p>
+      </div>
+
+      <div class="lec-callout lec-green">
+        <strong>Real World Uses:</strong> Finding the median in a dataset without sorting it. Finding the top-k or bottom-k values. Database engines use selection algorithms to answer ORDER BY LIMIT queries efficiently. Statistics libraries use it for percentile calculations.
+      </div>
+
+      <div class="lec-section">
+        <h2 class="lec-h2">Try It Now</h2>
+        <p class="lec-p">Load the Basic preset, hit Build Steps, then click Step one at a time. Watch the bars — notice how a whole section turns grey after the first partition. That grey section was eliminated in a single pass. The algorithm never looks at those elements again.</p>
+        <button class="lec-btn" onclick="loadPreset(0); buildSteps();">▶ Load Basic Example &amp; Build Steps</button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════ -->
+  <!-- TAB 2 — HOW IT WORKS                                  -->
+  <!-- ══════════════════════════════════════════════════════ -->
+  <div class="tab-pane" id="tab-howit">
+    <div class="lecture-body">
+
+      <div class="lec-section">
+        <h2 class="lec-h2">The Core Idea: The Pivot</h2>
+        <p class="lec-p">Quickselect works by choosing one element called the <strong>pivot</strong> and using it to divide the array into two groups:</p>
+        <ul class="lec-list">
+          <li>Everything <strong>smaller than or equal to</strong> the pivot goes to the <strong>left</strong></li>
+          <li>Everything <strong>greater than</strong> the pivot goes to the <strong>right</strong></li>
+          <li>The pivot itself is placed in its <strong>exact correct sorted position</strong></li>
+        </ul>
+        <p class="lec-p">This process is called <strong>partitioning</strong>. After one partition, the pivot will never move again — it is in its final position forever.</p>
+      </div>
+
+      <div class="lec-callout lec-yellow">
+        <strong>Key Fact:</strong> After partitioning around a pivot that lands at position p, the pivot is guaranteed to be the (p+1)-th smallest element in the array. This is not a guess — it is mathematically certain because every element to its left is smaller and every element to its right is larger.
+      </div>
+
+      <div class="lec-section">
+        <h2 class="lec-h2">The Decision After Each Partition</h2>
+        <p class="lec-p">After partitioning, the pivot is at some index <strong>p</strong>. We compare p to k (the rank we are looking for):</p>
+        <ul class="lec-list">
+          <li><strong>If p == k−1:</strong> The pivot IS the k-th smallest. We are done. ✅</li>
+          <li><strong>If k−1 &lt; p:</strong> The answer is somewhere in the left side. Ignore the right side completely and repeat on A[lo .. p−1].</li>
+          <li><strong>If k−1 &gt; p:</strong> The answer is somewhere in the right side. Ignore the left side completely and repeat on A[p+1 .. hi].</li>
+        </ul>
+        <p class="lec-p">This is the crucial step. We throw away at least half the array every time. The discarded half is gone forever — we never look at it again. This is what makes Quickselect fast.</p>
+      </div>
+
+      <div class="lec-section">
+        <h2 class="lec-h2">Worked Example: Find the 4th Smallest</h2>
+        <p class="lec-p">Array: <code>[3, 6, 8, 5, 2, 7, 1, 4]</code>, k = 4</p>
+        <div class="lec-steps">
+          <div class="lec-step"><span class="lec-step-num">1</span><div><strong>Pick pivot:</strong> Last element = 4 (shown in yellow in the visualization)</div></div>
+          <div class="lec-step"><span class="lec-step-num">2</span><div><strong>Partition:</strong> Scan left to right. 3 ≤ 4 → left. 6 &gt; 4 → skip. 8 &gt; 4 → skip. 5 &gt; 4 → skip. 2 ≤ 4 → left. 7 &gt; 4 → skip. 1 ≤ 4 → left. Place pivot.</div></div>
+          <div class="lec-step"><span class="lec-step-num">3</span><div><strong>Result:</strong> Array is now <code>[3, 2, 1, <u>4</u>, 8, 5, 7, 6]</code>. Pivot 4 is at index 3.</div></div>
+          <div class="lec-step"><span class="lec-step-num">4</span><div><strong>Decision:</strong> We want k = 4, which is index 3 (0-indexed). Pivot landed at index 3. They match — done!</div></div>
+          <div class="lec-step lec-step-found"><span class="lec-step-num">✓</span><div><strong>Answer: 4</strong> — the 4th smallest element. Verify: sorted array is [1,2,3,4,5,6,7,8]. Position 4 is indeed 4.</div></div>
+        </div>
+      </div>
+
+      <div class="lec-section">
+        <h2 class="lec-h2">What About the Lomuto Partition?</h2>
+        <p class="lec-p">This tool uses the <strong>Lomuto partition scheme</strong>. It uses two pointers:</p>
+        <ul class="lec-list">
+          <li><strong>i</strong> — the boundary between the "small" region and the "large" region. Starts just before the beginning.</li>
+          <li><strong>j</strong> — scans from left to right through every element.</li>
+        </ul>
+        <p class="lec-p">Whenever j finds an element smaller than or equal to the pivot, i advances one step and the two elements at i and j are swapped. At the end, the pivot is placed at position i+1. Watch the orange and blue bars in the visualization — those are i and j in action.</p>
+      </div>
+
+      <button class="lec-btn" onclick="loadPreset(0); buildSteps();">▶ Try the Basic Example</button>
+      <button class="lec-btn lec-btn-outline" onclick="loadPreset(1); buildSteps();">☠️ Try Worst Case</button>
+
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════ -->
+  <!-- TAB 3 — COMPLEXITY                                    -->
+  <!-- ══════════════════════════════════════════════════════ -->
+  <div class="tab-pane" id="tab-complexity">
+    <div class="lecture-body">
+
+      <div class="lec-section">
+        <h2 class="lec-h2">What Does Complexity Mean?</h2>
+        <p class="lec-p">Complexity describes <strong>how much work an algorithm does as the input gets bigger</strong>. We measure it by counting the number of key operations — usually comparisons — and expressing how that count grows with n.</p>
+        <p class="lec-p">We use Big-O notation. O(n) means the work grows proportionally to n. O(n²) means the work grows with the square of n. O(n log n) sits in between.</p>
+      </div>
+
+      <div class="lec-section">
+        <h2 class="lec-h2">Quickselect Complexity</h2>
+        <table class="complexity-table">
+          <tr><th>Case</th><th>Complexity</th><th>Why</th></tr>
+          <tr><td>Best Case</td><td style="color:var(--green);font-weight:700">O(n)</td><td>Pivot lands exactly at k on the first try. One pass through all n elements and done.</td></tr>
+          <tr><td>Average Case</td><td style="color:var(--accent);font-weight:700">O(n)</td><td>On average, each partition eliminates half the array. Total work: n + n/2 + n/4 + ... = 2n = O(n).</td></tr>
+          <tr><td>Worst Case</td><td style="color:var(--red);font-weight:700">O(n²)</td><td>Pivot is always the min or max. Each partition only eliminates one element. Total: n + (n−1) + ... + 1 = n²/2.</td></tr>
+          <tr><td>Space</td><td style="color:var(--yellow);font-weight:700">O(n)</td><td>Recursive call stack. Each call uses one stack frame. Worst case n frames deep.</td></tr>
+        </table>
+      </div>
+
+      <div class="lec-callout lec-blue">
+        <strong>Why is average case O(n)?</strong> Each partition scans the active range and eliminates roughly half. So the total work is n (first scan) + n/2 (second scan) + n/4 (third scan) + ... This is a geometric series that sums to 2n — which is O(n).
+      </div>
+
+      <div class="lec-section">
+        <h2 class="lec-h2">The Growth Chart</h2>
+        <p class="lec-p">Drag the slider below to increase n and watch how each complexity grows. The difference becomes dramatic at large n.</p>
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px;flex-wrap:wrap">
+          <label style="font-size:.8rem;color:var(--muted)">Max n: <input type="range" id="n-slider" min="10" max="500" value="200" style="width:140px" oninput="drawComplexityChart()" /></label>
+          <span id="n-label" style="font-family:var(--mono);font-size:.85rem;color:var(--accent);font-weight:700">n=200</span>
+        </div>
+        <div style="display:flex;flex-wrap:wrap;gap:10px;margin-bottom:8px">
+          <div class="leg-item"><div class="leg-dot" style="background:var(--green)"></div><span>Best O(n)</span></div>
+          <div class="leg-item"><div class="leg-dot" style="background:var(--accent)"></div><span>Average E[O(n)]</span></div>
+          <div class="leg-item"><div class="leg-dot" style="background:var(--yellow)"></div><span>Sort+Access O(n log n)</span></div>
+          <div class="leg-item"><div class="leg-dot" style="background:var(--red)"></div><span>Worst Case O(n²)</span></div>
+        </div>
+        <div class="bar-container">
+          <svg id="cmp-svg"></svg>
+        </div>
+      </div>
+
+      <div class="lec-section">
+        <h2 class="lec-h2">The Worst Case in Practice</h2>
+        <p class="lec-p">The worst case happens when the pivot is always the smallest or largest element — for example, always picking the last element of an already-sorted array. Every partition puts zero elements on one side and n−1 on the other, so nothing gets discarded efficiently.</p>
+        <div class="lec-callout lec-red">
+          <strong>How to avoid it:</strong> In real software, engineers either <strong>shuffle the array randomly before running Quickselect</strong>, or <strong>pick a random pivot</strong> instead of always using the last element. This makes the worst case statistically almost impossible.
+        </div>
+        <button class="lec-btn" onclick="loadPreset(1); buildSteps();">☠️ Run Worst-Case Demo — Watch the Counter</button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════ -->
+  <!-- TAB 4 — DIVIDE AND CONQUER                            -->
+  <!-- ══════════════════════════════════════════════════════ -->
+  <div class="tab-pane" id="tab-dnc">
+    <div class="lecture-body">
+
+      <div class="lec-section">
+        <h2 class="lec-h2">What is Divide and Conquer?</h2>
+        <p class="lec-p">Divide and Conquer is a problem-solving strategy with three steps:</p>
+        <ul class="lec-list">
+          <li><strong>Divide:</strong> Break the problem into smaller subproblems.</li>
+          <li><strong>Conquer:</strong> Solve the subproblems (often recursively).</li>
+          <li><strong>Combine:</strong> Merge the subproblem solutions back into one answer.</li>
+        </ul>
+        <p class="lec-p">Classic examples include Merge Sort, Quicksort, and Binary Search. Quickselect also uses this paradigm — but with a twist.</p>
+      </div>
+
+      <div class="lec-section">
+        <h2 class="lec-h2">How Quickselect Uses D&amp;C</h2>
+        <ul class="lec-list">
+          <li><strong>Divide:</strong> Partition the array around a pivot. The pivot ends up at position p.</li>
+          <li><strong>Conquer:</strong> If p == k, done. If k &lt; p, recurse only on the LEFT side. If k &gt; p, recurse only on the RIGHT side.</li>
+          <li><strong>Combine:</strong> Nothing to combine. The answer is returned directly. No merging step needed.</li>
+        </ul>
+      </div>
+
+      <div class="lec-callout lec-green">
+        <strong>The crucial difference from Quicksort:</strong> Quicksort recurses on BOTH sides of the pivot because it needs to sort everything. Quickselect only recurses on ONE side because it only needs to find one element. This halves the work at every level — which is why Quickselect is O(n) and Quicksort is O(n log n).
+      </div>
+
+      <div class="lec-section">
+        <h2 class="lec-h2">The Recursion Tree: A Straight Line</h2>
+        <p class="lec-p">Look at the Recursion Tree panel above when you run Quickselect. It is a <strong>straight vertical line</strong>, not a branching tree. Each node shows the range being searched. Each step, the range shrinks. At the bottom is the answer.</p>
+        <p class="lec-p">Compare this to what Quicksort's recursion tree looks like:</p>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:16px;margin-top:10px">
+          <div>
+            <p style="font-size:.78rem;color:var(--red);font-weight:700;margin-bottom:6px">Quicksort — branches both ways</p>
+            <svg viewBox="0 0 200 160" style="width:100%;background:var(--card);border-radius:8px;border:1px solid var(--border)">
+              <text x="100" y="18" fill="#f59e0b" font-size="10" text-anchor="middle" font-family="monospace">[0..7]</text>
+              <line x1="100" y1="22" x2="55" y2="48" stroke="#64748b" stroke-width="1.5"/>
+              <line x1="100" y1="22" x2="145" y2="48" stroke="#64748b" stroke-width="1.5"/>
+              <text x="55" y="58" fill="#f59e0b" font-size="9" text-anchor="middle" font-family="monospace">[0..2]</text>
+              <text x="145" y="58" fill="#f59e0b" font-size="9" text-anchor="middle" font-family="monospace">[4..7]</text>
+              <line x1="55" y1="62" x2="32" y2="88" stroke="#64748b" stroke-width="1"/>
+              <line x1="55" y1="62" x2="78" y2="88" stroke="#64748b" stroke-width="1"/>
+              <line x1="145" y1="62" x2="122" y2="88" stroke="#64748b" stroke-width="1"/>
+              <line x1="145" y1="62" x2="168" y2="88" stroke="#64748b" stroke-width="1"/>
+              <text x="32" y="98" fill="#8b5cf6" font-size="8" text-anchor="middle">...</text>
+              <text x="78" y="98" fill="#8b5cf6" font-size="8" text-anchor="middle">...</text>
+              <text x="122" y="98" fill="#8b5cf6" font-size="8" text-anchor="middle">...</text>
+              <text x="168" y="98" fill="#8b5cf6" font-size="8" text-anchor="middle">...</text>
+              <text x="100" y="130" fill="#ef4444" font-size="9" text-anchor="middle">Branches both ways</text>
+              <text x="100" y="148" fill="#ef4444" font-size="9" text-anchor="middle">→ O(n log n)</text>
+            </svg>
+          </div>
+          <div>
+            <p style="font-size:.78rem;color:var(--green);font-weight:700;margin-bottom:6px">Quickselect — one direction only</p>
+            <svg viewBox="0 0 200 160" style="width:100%;background:var(--card);border-radius:8px;border:1px solid var(--border)">
+              <text x="100" y="18" fill="#f59e0b" font-size="10" text-anchor="middle" font-family="monospace">[0..7]</text>
+              <line x1="100" y1="22" x2="100" y2="46" stroke="#22c55e" stroke-width="2"/>
+              <line x1="100" y1="22" x2="155" y2="46" stroke="#374151" stroke-width="1.5" stroke-dasharray="4,3"/>
+              <text x="162" y="52" fill="#4b5563" font-size="8" text-anchor="middle">✕ discard</text>
+              <text x="100" y="58" fill="#f59e0b" font-size="9" text-anchor="middle" font-family="monospace">[0..2]</text>
+              <line x1="100" y1="62" x2="100" y2="86" stroke="#22c55e" stroke-width="2"/>
+              <line x1="100" y1="62" x2="155" y2="86" stroke="#374151" stroke-width="1.5" stroke-dasharray="4,3"/>
+              <text x="162" y="92" fill="#4b5563" font-size="8" text-anchor="middle">✕ discard</text>
+              <text x="100" y="98" fill="#f59e0b" font-size="9" text-anchor="middle" font-family="monospace">[0..1]</text>
+              <line x1="100" y1="102" x2="100" y2="118" stroke="#22c55e" stroke-width="2" stroke-dasharray="3"/>
+              <text x="100" y="132" fill="#22c55e" font-size="9" text-anchor="middle">✓ found!</text>
+              <text x="100" y="148" fill="#22c55e" font-size="9" text-anchor="middle">→ E[O(n)]</text>
+            </svg>
+          </div>
+        </div>
+      </div>
+
+      <div class="lec-section">
+        <h2 class="lec-h2">Why Greedy Does Not Work Here</h2>
+        <p class="lec-p">A greedy approach would be: scan the whole array, find the minimum, remove it, and repeat k times. This gives you the k-th smallest, but it costs <strong>O(n × k)</strong> time — which in the worst case is O(n²). Quickselect beats this on average.</p>
+        <div class="lec-callout lec-red">
+          <strong>Greedy fails here</strong> because there is no locally optimal choice that guarantees global optimality without doing at least O(n) work per selection step. The D&amp;C approach is smarter — it narrows the search space geometrically.
+        </div>
+        <button class="lec-btn" onclick="loadPreset(0); buildSteps();">▶ Watch the Recursion Tree Build Live</button>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════ -->
+  <!-- TAB 5 — COMPARISONS                                   -->
+  <!-- ══════════════════════════════════════════════════════ -->
+  <div class="tab-pane" id="tab-compare">
+    <div class="lecture-body">
+
+      <div class="lec-section">
+        <h2 class="lec-h2">Quickselect vs Sort + Access</h2>
+        <p class="lec-p">The most obvious alternative to Quickselect is to sort the array first and then index into it. This always works and is easy to implement. But it costs O(n log n) every time, even if you only need one answer.</p>
+        <p class="lec-p">Quickselect costs O(n) on average. For a single query on a large dataset, Quickselect wins clearly.</p>
+        <p class="lec-p"><strong>When Sort + Access wins:</strong> If you need to answer many different rank queries on the same data, sorting once and indexing many times is cheaper overall. Sort once for O(n log n), then every query is O(1).</p>
+      </div>
+
+      <div class="lec-section">
+        <h2 class="lec-h2">Quickselect vs Binary Search</h2>
+        <p class="lec-p">Both algorithms eliminate half the problem at each step. But they are solving different problems:</p>
+        <table class="complexity-table">
+          <tr><th></th><th>Binary Search</th><th>Quickselect</th></tr>
+          <tr><td>Input required</td><td>Sorted array</td><td>Unsorted array</td></tr>
+          <tr><td>Finds</td><td>A specific value</td><td>A specific rank (k-th smallest)</td></tr>
+          <tr><td>Halving mechanism</td><td>Compare value to midpoint</td><td>Partition around pivot, compare pivot index to k</td></tr>
+          <tr><td>Time complexity</td><td style="color:var(--green)">O(log n)</td><td style="color:var(--accent)">O(n) average</td></tr>
+          <tr><td>Why the difference?</td><td colspan="2">Binary Search does O(1) work per step (just one comparison). Quickselect does O(n) work per step (scans the whole active range to partition it).</td></tr>
+        </table>
+      </div>
+
+      <div class="lec-section">
+        <h2 class="lec-h2">Quickselect vs Quicksort</h2>
+        <p class="lec-p">These two algorithms share the same partition step and the same pivot idea. The difference is entirely in what happens after partitioning:</p>
+        <table class="complexity-table">
+          <tr><th></th><th>Quicksort</th><th>Quickselect</th></tr>
+          <tr><td>Goal</td><td>Sort the entire array</td><td>Find one element at rank k</td></tr>
+          <tr><td>After partition</td><td>Recurse on BOTH sides</td><td>Recurse on ONE side only</td></tr>
+          <tr><td>Recursion tree</td><td>Full branching tree</td><td>Straight line (linear path)</td></tr>
+          <tr><td>Average time</td><td style="color:var(--yellow)">O(n log n)</td><td style="color:var(--green)">O(n)</td></tr>
+          <tr><td>Worst case</td><td style="color:var(--red)">O(n²)</td><td style="color:var(--red)">O(n²)</td></tr>
+        </table>
+      </div>
+
+      <div class="lec-section">
+        <h2 class="lec-h2">Quickselect vs Median of Medians</h2>
+        <p class="lec-p">Median of Medians is a more advanced selection algorithm that guarantees a good pivot every time. It always runs in <strong>O(n) worst case</strong> — unlike Quickselect which has O(n²) worst case.</p>
+        <p class="lec-p">However, Median of Medians has a much larger constant factor. In practice, randomized Quickselect is faster on average because it avoids the overhead of finding a guaranteed-good pivot. Median of Medians is used when worst-case guarantees are absolutely required.</p>
+        <div class="lec-callout lec-blue">
+          <strong>Summary:</strong> Randomized Quickselect is the right choice for most real-world applications. Median of Medians is the right choice when you cannot afford the worst case — for example, in real-time or safety-critical systems.
+        </div>
+      </div>
+
+    </div>
+  </div>
+
+  <!-- ══════════════════════════════════════════════════════ -->
+  <!-- TAB 6 — KEY CONCEPTS                                  -->
+  <!-- ══════════════════════════════════════════════════════ -->
+  <div class="tab-pane" id="tab-tips">
+    <div class="lecture-body">
+
+      <div class="lec-section">
+        <h2 class="lec-h2">Things You Must Know</h2>
+
+        <div class="lec-callout lec-blue">
+          <strong>1. Quickselect is a selection algorithm, not a sorting algorithm.</strong> It finds one element at a specific rank. It does not sort the array. After Quickselect finishes, the array is partially rearranged but not fully sorted.
+        </div>
+        <div class="lec-callout lec-green">
+          <strong>2. The pivot always ends up in its correct sorted position.</strong> This is the mathematical guarantee that makes the discard safe. After partition, every element to the left is smaller and every element to the right is larger — so the pivot is definitively placed.
+        </div>
+        <div class="lec-callout lec-yellow">
+          <strong>3. Discarding is safe, not a guess.</strong> When we discard the right side, it is because every element there is larger than the pivot, and the pivot itself is already larger than the rank we need. The answer mathematically cannot be on the discarded side.
+        </div>
+        <div class="lec-callout lec-red">
+          <strong>4. The worst case is real but avoidable.</strong> Always choosing the last element as pivot on a sorted array triggers O(n²). The fix is simple: use a random pivot. This is standard practice in all real implementations.
+        </div>
+      </div>
+
+      <div class="lec-section">
+        <h2 class="lec-h2">Common Mistakes</h2>
+        <div class="lec-callout lec-red">
+          <strong>⚠ Mistake 1 — Confusing k indexing:</strong> k=1 means the smallest (minimum). k=n means the largest (maximum). Some implementations use 0-indexed k internally — always clarify which convention is being used.
+        </div>
+        <div class="lec-callout lec-red">
+          <strong>⚠ Mistake 2 — Thinking Quickselect always beats sorting:</strong> For a single query, yes. For many queries on the same data, sorting once and indexing repeatedly is cheaper.
+        </div>
+        <div class="lec-callout lec-red">
+          <strong>⚠ Mistake 3 — Confusing Quickselect with Quicksort:</strong> Same partition step, completely different goals. Quicksort sorts everything. Quickselect finds one rank. Quicksort recurses both ways. Quickselect recurses one way.
+        </div>
+      </div>
+
+      <div class="lec-section">
+        <h2 class="lec-h2">Quick Reference</h2>
+        <table class="complexity-table">
+          <tr><th>Property</th><th>Value</th></tr>
+          <tr><td>Algorithm type</td><td>Selection (Order Statistics)</td></tr>
+          <tr><td>Invented by</td><td>Tony Hoare, 1961</td></tr>
+          <tr><td>Paradigm</td><td>Divide and Conquer</td></tr>
+          <tr><td>Best case time</td><td style="color:var(--green)">O(n)</td></tr>
+          <tr><td>Average case time</td><td style="color:var(--accent)">O(n)</td></tr>
+          <tr><td>Worst case time</td><td style="color:var(--red)">O(n²)</td></tr>
+          <tr><td>Space complexity</td><td style="color:var(--yellow)">O(n) stack</td></tr>
+          <tr><td>In-place?</td><td>Yes — no extra array needed</td></tr>
+          <tr><td>Stable?</td><td>No — relative order of equal elements may change</td></tr>
+          <tr><td>Partition used here</td><td>Lomuto (single pointer)</td></tr>
+        </table>
+      </div>
+
+    </div>
+  </div>
+
+</div>
+<!-- end right panel -->
+</div><!-- end main-wrap -->
+
+<script>
+// ═══════════════════════════════════════════════════════════════════
+//  PSEUDOCODE DEFINITION
+// ═══════════════════════════════════════════════════════════════════
+const PSEUDO = [
+  { code: "QUICKSELECT(A, lo, hi, k):", tip: "Entry point: find k-th smallest in A[lo..hi] (0-indexed k)" },
+  { code: "  if lo == hi:", tip: "Base case: only one element, it must be the answer" },
+  { code: "    return A[lo]", tip: "Return the single element" },
+  { code: "  pivotIdx ← PARTITION(A, lo, hi)", tip: "Partition and get the pivot's final position" },
+  { code: "  if k == pivotIdx:", tip: "Pivot landed exactly at rank k — found!" },
+  { code: "    return A[pivotIdx]", tip: "Return the pivot value — it IS the k-th smallest" },
+  { code: "  else if k < pivotIdx:", tip: "k-th element is in the LEFT partition" },
+  { code: "    return QUICKSELECT(A, lo, pivotIdx-1, k)", tip: "Recurse on left side only — discard right" },
+  { code: "  else:", tip: "k-th element is in the RIGHT partition" },
+  { code: "    return QUICKSELECT(A, pivotIdx+1, hi, k)", tip: "Recurse on right side only — discard left" },
+  { code: "", tip: "" },
+  { code: "PARTITION(A, lo, hi):", tip: "Lomuto partition: pivot = A[hi]" },
+  { code: "  pivot ← A[hi]", tip: "Choose last element as pivot" },
+  { code: "  i ← lo - 1", tip: "i marks the boundary of ≤pivot elements" },
+  { code: "  for j ← lo to hi-1:", tip: "j scans through the array" },
+  { code: "    if A[j] ≤ pivot:", tip: "Current element belongs on the left" },
+  { code: "      i ← i + 1", tip: "Expand the left region" },
+  { code: "      swap A[i] ↔ A[j]", tip: "Move smaller element to left region" },
+  { code: "  swap A[i+1] ↔ A[hi]", tip: "Place pivot in its correct position" },
+  { code: "  return i+1", tip: "Return pivot's final sorted index" },
+];
+
+// ═══════════════════════════════════════════════════════════════════
+//  PRESETS
+// ═══════════════════════════════════════════════════════════════════
+const PRESETS = [
+  { arr: [3,6,8,5,2,7,1,4], k: 4, name: "Basic 8-element" },
+  { arr: [1,2,3,4,5,6,7,8], k: 1, name: "⚠ Worst Case (sorted, k=1)" },
+  { arr: [15,3,9,11,7,2,18,6,13,4,20,1], k: 7, name: "Random 12 elements" },
+  { arr: [4,4,2,4,1,2,3,1,3], k: 5, name: "Duplicates" },
+  { arr: [9,8,7,6,5,4,3,2,1], k: 3, name: "Reverse sorted" },
+  { arr: [10,4,15,3,7,12,1,9,6,8,11,5], k: 6, name: "Find Median (k=6/12)" },
+];
+
+function loadPreset(i) {
+  document.getElementById('inp-array').value = PRESETS[i].arr.join(',');
+  document.getElementById('inp-k').value = PRESETS[i].k;
+  resetAll();
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  GLOBAL STATE
+// ═══════════════════════════════════════════════════════════════════
+let steps = [];
+let stepIdx = 0;
+let animTimer = null;
+let cntCmp = 0, cntSwp = 0, cntPart = 0;
+let treeNodes = [];
+
+function getSpeed() {
+  const v = parseInt(document.getElementById('speed-slider').value);
+  const speeds = {1:2000,2:1500,3:1000,4:700,5:500,6:400,7:300,8:220,9:180,10:140,11:110,12:85,13:65,14:50,15:35,16:25};
+  return speeds[v] || 700;
+}
+function updateSpeed() {
+  const v = parseInt(document.getElementById('speed-slider').value);
+  const labels = {1:'0.25×',2:'0.33×',3:'0.5×',4:'1.0×',5:'1.3×',6:'1.6×',7:'2×',8:'2.5×',9:'3×',10:'3.5×',11:'4×',12:'5×',13:'6×',14:'8×',15:'10×',16:'16×'};
+  document.getElementById('speed-label').textContent = labels[v]||'1×';
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  STEP GENERATION
+// ═══════════════════════════════════════════════════════════════════
+function parseArray() {
+  return document.getElementById('inp-array').value
+    .split(',').map(s=>parseInt(s.trim())).filter(n=>!isNaN(n));
+}
+
+function buildSteps() {
+  const arr = parseArray();
+  const kVal = parseInt(document.getElementById('inp-k').value);
+  if (!arr.length) { alert('Enter valid array'); return; }
+  if (kVal < 1 || kVal > arr.length) { alert('k must be between 1 and '+arr.length); return; }
+
+  steps = [];
+  treeNodes = [];
+  cntCmp = 0; cntSwp = 0; cntPart = 0;
+  const a = [...arr];
+  quickselectSteps(a, 0, a.length - 1, kVal - 1, 0, undefined);
+
+  stepIdx = 0;
+  updateStatus('Ready');
+  updateCounters();
+  renderStep(0);
+  document.getElementById('btn-step').disabled = false;
+  document.getElementById('btn-play').disabled = false;
+  document.getElementById('btn-pause').disabled = false;
+}
+
+function quickselectSteps(arr, lo, hi, k, depth, parentId) {
+  // record call — parentId passed in from caller
+  const nodeId = treeNodes.length;
+  treeNodes.push({ lo, hi, k, depth, parentId: parentId !== undefined ? parentId : null, status: 'active' });
+
+  steps.push({ type: 'call', arr: [...arr], lo, hi, k, depth, nodeId, pseudo: 0,
+    explain: `Quickselect called on A[${lo}..${hi}], looking for rank k=${k} (${k+1}-th smallest).` });
+
+  if (lo === hi) {
+    steps.push({ type: 'basecase', arr: [...arr], lo, hi, k, depth, nodeId, pseudo: 1,
+      explain: `Base case: only one element A[${lo}]=${arr[lo]}. This IS the answer.` });
+    treeNodes[nodeId].status = 'found';
+    return arr[lo];
+  }
+
+  // partition
+  const pivotVal = arr[hi];
+  steps.push({ type: 'pivot-chosen', arr: [...arr], lo, hi, k, pivotIdx: hi, pivotVal, depth, nodeId, pseudo: 12,
+    explain: `Partition A[${lo}..${hi}]: pivot chosen = A[${hi}] = ${pivotVal}.` });
+
+  let i = lo - 1;
+  for (let j = lo; j < hi; j++) {
+    cntCmp++;
+    steps.push({ type: 'compare', arr: [...arr], lo, hi, k, i, j, pivotIdx: hi, pivotVal, depth, nodeId, pseudo: 15,
+      explain: `Comparing A[${j}]=${arr[j]} with pivot=${pivotVal}. ${arr[j]<=pivotVal?'A[j] ≤ pivot → swap into left region.':'A[j] > pivot → skip.'}`,
+      cntCmp });
+    if (arr[j] <= pivotVal) {
+      i++;
+      const tmp = arr[i]; arr[i] = arr[j]; arr[j] = tmp;
+      cntSwp++;
+      steps.push({ type: 'swap', arr: [...arr], lo, hi, k, i, j, pivotIdx: hi, pivotVal, depth, nodeId, pseudo: 17,
+        explain: `Swapped A[${i}]=${arr[i]} ↔ A[${j}]=${arr[j]}. Left boundary i now at ${i}.`,
+        cntSwp });
+    }
+  }
+  // place pivot
+  const tmp = arr[i+1]; arr[i+1] = arr[hi]; arr[hi] = tmp;
+  cntSwp++;
+  const p = i + 1;
+  cntPart++;
+  steps.push({ type: 'partition-done', arr: [...arr], lo, hi, k, p, pivotVal: arr[p], depth, nodeId, pseudo: 18,
+    explain: `Pivot ${arr[p]} placed at index ${p}. Elements left of ${p} are ≤${arr[p]}, right are >${arr[p]}.`,
+    cntPart });
+
+  // decide
+  if (k === p) {
+    steps.push({ type: 'found', arr: [...arr], lo, hi, k, p, pivotVal: arr[p], depth, nodeId, pseudo: 4,
+      explain: `🎉 Found! Pivot index ${p} == k=${k}. The ${k+1}-th smallest element is ${arr[p]}!` });
+    treeNodes[nodeId].status = 'found';
+    return arr[p];
+  } else if (k < p) {
+    steps.push({ type: 'recurse-left', arr: [...arr], lo, hi, k, p, depth, nodeId, pseudo: 6,
+      explain: `k=${k} < pivotIdx=${p}: answer is in LEFT subarray A[${lo}..${p-1}]. Discarding right side.` });
+    treeNodes[nodeId].status = 'recurse-left';
+    return quickselectSteps(arr, lo, p - 1, k, depth + 1, nodeId);
+  } else {
+    steps.push({ type: 'recurse-right', arr: [...arr], lo, hi, k, p, depth, nodeId, pseudo: 9,
+      explain: `k=${k} > pivotIdx=${p}: answer is in RIGHT subarray A[${p+1}..${hi}]. Discarding left side.` });
+    treeNodes[nodeId].status = 'recurse-right';
+    return quickselectSteps(arr, p + 1, hi, k, depth + 1, nodeId);
+  }
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  RENDER
+// ═══════════════════════════════════════════════════════════════════
+function renderStep(idx) {
+  if (!steps.length) return;
+  idx = Math.max(0, Math.min(idx, steps.length - 1));
+  stepIdx = idx;
+  const s = steps[idx];
+
+  // update counters
+  if (s.cntCmp !== undefined) cntCmp = s.cntCmp;
+  if (s.cntSwp !== undefined) cntSwp = s.cntSwp;
+  if (s.cntPart !== undefined) cntPart = s.cntPart;
+  updateCounters();
+
+  // step counter
+  document.getElementById('step-counter').textContent = `${idx+1} / ${steps.length}`;
+
+  // explain
+  document.getElementById('explain-box').innerHTML = s.explain || '';
+
+  // info chips
+  document.getElementById('ic-k').textContent = s.k !== undefined ? (s.k+1) : '—';
+  document.getElementById('ic-lo').textContent = s.lo !== undefined ? s.lo : '—';
+  document.getElementById('ic-hi').textContent = s.hi !== undefined ? s.hi : '—';
+  document.getElementById('ic-piv').textContent = s.p !== undefined ? s.p : (s.pivotIdx !== undefined ? s.pivotIdx : '—');
+  document.getElementById('ic-pivv').textContent = s.pivotVal !== undefined ? s.pivotVal : '—';
+  document.getElementById('ic-res').textContent = s.type === 'found' ? `${s.pivotVal} ✅` : '—';
+
+  // pseudo highlight
+  highlightPseudo(s.pseudo || 0);
+
+  // draw bars
+  drawBars(s);
+
+  // draw tree
+  drawTree(idx);
+
+  // call stack
+  updateCallStack(idx);
+
+  // history
+  addHistory(idx, s);
+
+  // status
+  if (s.type === 'found') updateStatus('Done ✅');
+  else if (s.type === 'basecase') updateStatus('Done ✅');
+}
+
+// ── BARS ──
+function drawBars(s) {
+  const svg = document.getElementById('bar-svg');
+  const W = svg.clientWidth || svg.parentElement.clientWidth || 600;
+  const H = 280;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.innerHTML = '';
+
+  const arr = s.arr;
+  const n = arr.length;
+  const maxVal = Math.max(...arr);
+  const barW = Math.max(18, Math.floor((W - 40) / n) - 4);
+  const barGap = Math.floor((W - 40) / n);
+  const maxH = H - 55;
+
+  arr.forEach((v, i) => {
+    const x = 20 + i * barGap;
+    const bh = Math.round((v / maxVal) * maxH);
+    const y = H - bh - 30;
+
+    // determine color
+    let fill = '#2a3248';
+    let label = '';
+
+    // Discard region
+    if (s.lo !== undefined && (i < s.lo || i > s.hi)) fill = 'var(--discard-c)';
+    else fill = 'var(--accent)';
+
+    // Pivot
+    if (s.type === 'pivot-chosen' && i === s.pivotIdx) { fill = 'var(--pivot-c)'; label = 'pivot'; }
+    if (s.type === 'partition-done' && i === s.p) { fill = 'var(--pivot-c)'; label = 'pivot'; }
+
+    // compare j
+    if ((s.type === 'compare' || s.type === 'swap') && i === s.j) { fill = 'var(--compare-c)'; label = 'j'; }
+    if ((s.type === 'compare' || s.type === 'swap') && s.i !== undefined && i === s.i) { fill = 'var(--swap-c)'; label = 'i'; }
+    if (s.type === 'compare' && i === s.pivotIdx) { fill = 'var(--pivot-c)'; label = 'pivot'; }
+    if (s.type === 'swap' && i === s.pivotIdx) { fill = 'var(--pivot-c)'; }
+
+    // recurse highlights
+    if ((s.type === 'recurse-left') && i < s.p) fill = 'var(--active-c)';
+    if ((s.type === 'recurse-right') && i > s.p) fill = 'var(--active-c)';
+    if ((s.type === 'recurse-left' || s.type === 'recurse-right') && i === s.p) fill = 'var(--pivot-c)';
+
+    // found
+    if (s.type === 'found' && i === s.p) { fill = 'var(--found-c)'; label = `✓ k=${s.k+1}`; }
+    if (s.type === 'basecase' && i === s.lo) { fill = 'var(--found-c)'; label = '✓'; }
+
+    // draw bar
+    const rect = document.createElementNS('http://www.w3.org/2000/svg','rect');
+    rect.setAttribute('x', x); rect.setAttribute('y', y);
+    rect.setAttribute('width', barW); rect.setAttribute('height', bh);
+    rect.setAttribute('rx', '3'); rect.setAttribute('fill', fill);
+    rect.style.transition = 'all 0.2s ease';
+    svg.appendChild(rect);
+
+    // value text
+    const vt = document.createElementNS('http://www.w3.org/2000/svg','text');
+    vt.setAttribute('x', x + barW/2); vt.setAttribute('y', y - 4);
+    vt.setAttribute('text-anchor','middle'); vt.setAttribute('font-size','10');
+    vt.setAttribute('fill','#94a3b8'); vt.setAttribute('font-family','JetBrains Mono,monospace');
+    vt.textContent = v;
+    svg.appendChild(vt);
+
+    // index text
+    const it = document.createElementNS('http://www.w3.org/2000/svg','text');
+    it.setAttribute('x', x + barW/2); it.setAttribute('y', H - 14);
+    it.setAttribute('text-anchor','middle'); it.setAttribute('font-size','9');
+    it.setAttribute('fill','#475569');
+    it.textContent = i;
+    svg.appendChild(it);
+
+    // pointer label
+    if (label) {
+      const pt = document.createElementNS('http://www.w3.org/2000/svg','text');
+      pt.setAttribute('x', x + barW/2); pt.setAttribute('y', H - 2);
+      pt.setAttribute('text-anchor','middle'); pt.setAttribute('font-size','9');
+      pt.setAttribute('fill', fill); pt.setAttribute('font-weight','700');
+      pt.textContent = label;
+      svg.appendChild(pt);
+    }
+  });
+
+  // range bracket
+  if (s.lo !== undefined && s.hi !== undefined && s.lo <= s.hi) {
+    const x1 = 20 + s.lo * barGap;
+    const x2 = 20 + s.hi * barGap + barW;
+    const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+    line.setAttribute('x1',x1); line.setAttribute('y1', H-22);
+    line.setAttribute('x2',x2); line.setAttribute('y2', H-22);
+    line.setAttribute('stroke','var(--accent)'); line.setAttribute('stroke-width','2');
+    line.setAttribute('stroke-dasharray','4');
+    svg.appendChild(line);
+  }
+}
+
+// ── TREE ──
+function drawTree(curIdx) {
+  const svg = document.getElementById('tree-svg');
+  const W = svg.clientWidth || svg.parentElement.clientWidth || 600;
+
+  if (!treeNodes.length) {
+    svg.setAttribute('viewBox', `0 0 ${W} 120`);
+    svg.innerHTML = '';
+    return;
+  }
+
+  // Build nodes revealed up to curIdx — always start as 'active', never pre-green
+  const seen = new Map();
+  for (let si = 0; si <= curIdx; si++) {
+    const s = steps[si];
+    if (s.nodeId !== undefined && !seen.has(s.nodeId)) {
+      const base = treeNodes[s.nodeId];
+      seen.set(s.nodeId, {
+        id: s.nodeId,
+        lo: base.lo, hi: base.hi, k: base.k,
+        depth: base.depth, parentId: base.parentId,
+        status: 'active',
+        recurseDir: null, pivotPos: null
+      });
+    }
+    // Only mark green when we actually reach that step
+    if (s.type === 'found' || s.type === 'basecase') {
+      const n = seen.get(s.nodeId);
+      if (n) n.status = 'found';
+    }
+    if (s.type === 'recurse-left' || s.type === 'recurse-right') {
+      const n = seen.get(s.nodeId);
+      if (n) { n.recurseDir = s.type === 'recurse-left' ? 'left' : 'right'; n.pivotPos = s.p; }
+    }
+  }
+
+  const nodes = Array.from(seen.values());
+  if (!nodes.length) { svg.innerHTML = ''; return; }
+
+  // Layout: each node is a row (depth), stacked vertically as a linear path
+  const NODE_R = 18;
+  const ROW_H = 58;
+  const totalH = Math.max(120, nodes.length * ROW_H + 20);
+
+  svg.setAttribute('viewBox', `0 0 ${W} ${totalH}`);
+  svg.setAttribute('height', totalH);
+  svg.innerHTML = '';
+
+  const CX = W / 2;
+  const currentNodeId = steps[curIdx] ? steps[curIdx].nodeId : -1;
+
+  nodes.forEach((n, idx) => {
+    const cy = 24 + idx * ROW_H;
+    n._cx = CX;
+    n._cy = cy;
+  });
+
+  // Draw edges + discard arms
+  nodes.forEach((n, idx) => {
+    if (idx === 0) return;
+    const parent = nodes[idx - 1];
+
+    // Main recursive edge (straight down — the "kept" side)
+    const line = document.createElementNS('http://www.w3.org/2000/svg','line');
+    line.setAttribute('x1', CX); line.setAttribute('y1', parent._cy + NODE_R);
+    line.setAttribute('x2', CX); line.setAttribute('y2', n._cy - NODE_R);
+    line.setAttribute('stroke','#4f9cf9'); line.setAttribute('stroke-width','2');
+    svg.appendChild(line);
+
+    // Arrow head
+    const arr = document.createElementNS('http://www.w3.org/2000/svg','polygon');
+    const ax = CX, ay = n._cy - NODE_R;
+    arr.setAttribute('points',`${ax},${ay} ${ax-5},${ay-8} ${ax+5},${ay-8}`);
+    arr.setAttribute('fill','#4f9cf9');
+    svg.appendChild(arr);
+
+    // Discard arm — show the discarded half
+    if (parent.recurseDir) {
+      const discardX = parent.recurseDir === 'left' ? CX + 90 : CX - 90;
+      const discardY = parent._cy + 38;
+
+      const dline = document.createElementNS('http://www.w3.org/2000/svg','line');
+      dline.setAttribute('x1', CX); dline.setAttribute('y1', parent._cy + NODE_R);
+      dline.setAttribute('x2', discardX); dline.setAttribute('y2', discardY);
+      dline.setAttribute('stroke','#374151'); dline.setAttribute('stroke-width','1.5');
+      dline.setAttribute('stroke-dasharray','4,3');
+      svg.appendChild(dline);
+
+      // X mark
+      const xc = document.createElementNS('http://www.w3.org/2000/svg','text');
+      xc.setAttribute('x', discardX); xc.setAttribute('y', discardY + 4);
+      xc.setAttribute('text-anchor','middle'); xc.setAttribute('font-size','11');
+      xc.setAttribute('fill','#ef4444'); xc.setAttribute('font-weight','700');
+      xc.textContent = '✕';
+      svg.appendChild(xc);
+
+      // Discard label
+      const discardSide = parent.recurseDir === 'left' ? 'right' : 'left';
+      const p = parent.pivotPos;
+      let rangeText = '';
+      if (discardSide === 'right' && p !== undefined) rangeText = `[${p+1}..${parent.hi}]`;
+      else if (discardSide === 'left' && p !== undefined) rangeText = `[${parent.lo}..${p-1}]`;
+
+      const dlbl = document.createElementNS('http://www.w3.org/2000/svg','text');
+      dlbl.setAttribute('x', discardX); dlbl.setAttribute('y', discardY + 17);
+      dlbl.setAttribute('text-anchor','middle'); dlbl.setAttribute('font-size','8');
+      dlbl.setAttribute('fill','#4b5563');
+      dlbl.textContent = rangeText ? `discard ${rangeText}` : 'discard';
+      svg.appendChild(dlbl);
+    }
+  });
+
+  // Draw nodes
+  nodes.forEach((n, idx) => {
+    const isCurrent = n.id === currentNodeId;
+    const isFound   = n.status === 'found';
+
+    // glow for current
+    if (isCurrent) {
+      const glow = document.createElementNS('http://www.w3.org/2000/svg','circle');
+      glow.setAttribute('cx', CX); glow.setAttribute('cy', n._cy);
+      glow.setAttribute('r', NODE_R + 5);
+      glow.setAttribute('fill','rgba(79,156,249,0.18)');
+      svg.appendChild(glow);
+    }
+
+    const fill   = isFound ? '#22c55e' : isCurrent ? '#4f9cf9' : '#1a1f2e';
+    const stroke = isFound ? '#22c55e' : isCurrent ? '#4f9cf9' : '#252d40';
+
+    const circle = document.createElementNS('http://www.w3.org/2000/svg','circle');
+    circle.setAttribute('cx', CX); circle.setAttribute('cy', n._cy);
+    circle.setAttribute('r', NODE_R);
+    circle.setAttribute('fill', fill);
+    circle.setAttribute('stroke', stroke);
+    circle.setAttribute('stroke-width','2');
+    svg.appendChild(circle);
+
+    // range label inside node
+    const lbl = document.createElementNS('http://www.w3.org/2000/svg','text');
+    lbl.setAttribute('x', CX); lbl.setAttribute('y', n._cy + 3);
+    lbl.setAttribute('text-anchor','middle'); lbl.setAttribute('font-size','8');
+    lbl.setAttribute('fill', isCurrent || isFound ? '#fff' : '#94a3b8');
+    lbl.setAttribute('font-family','JetBrains Mono,monospace');
+    lbl.textContent = `[${n.lo},${n.hi}]`;
+    svg.appendChild(lbl);
+
+    // depth label to the left
+    const dlbl = document.createElementNS('http://www.w3.org/2000/svg','text');
+    dlbl.setAttribute('x', CX - NODE_R - 8); dlbl.setAttribute('y', n._cy + 4);
+    dlbl.setAttribute('text-anchor','end'); dlbl.setAttribute('font-size','9');
+    dlbl.setAttribute('fill','#374151');
+    dlbl.textContent = `d${n.depth}`;
+    svg.appendChild(dlbl);
+
+    // found badge
+    if (isFound) {
+      const badge = document.createElementNS('http://www.w3.org/2000/svg','text');
+      badge.setAttribute('x', CX + NODE_R + 6); badge.setAttribute('y', n._cy + 4);
+      badge.setAttribute('text-anchor','start'); badge.setAttribute('font-size','10');
+      badge.setAttribute('fill','#22c55e');
+      badge.textContent = '✓ found!';
+      svg.appendChild(badge);
+    }
+  });
+}
+
+// ── CALL STACK ──
+function updateCallStack(idx) {
+  const cs = document.getElementById('call-stack');
+  cs.innerHTML = '';
+
+  // collect active calls up to this step
+  const calls = [];
+  for (let si = 0; si <= idx; si++) {
+    const s = steps[si];
+    if (s.type === 'call') calls.push({ lo: s.lo, hi: s.hi, k: s.k, depth: s.depth });
+    if (s.type === 'found' || s.type === 'basecase') {
+      // pop matching depth
+      const di = calls.findLastIndex(c=>c.depth===s.depth);
+      if (di >= 0) calls.splice(di, 1);
+    }
+  }
+
+  if (!calls.length) { cs.innerHTML = '<div style="color:var(--muted);font-size:.75rem">No active call</div>'; return; }
+  calls.forEach((c, ci) => {
+    const d = document.createElement('div');
+    d.className = 'stack-frame' + (ci === calls.length - 1 ? ' top' : '');
+    d.textContent = `depth ${c.depth}: QUICKSELECT(A, ${c.lo}, ${c.hi}, k=${c.k})`;
+    cs.appendChild(d);
+  });
+}
+
+// ── PSEUDOCODE ──
+function buildPseudo() {
+  const wrap = document.getElementById('pseudo-wrap');
+  wrap.innerHTML = '';
+  const tip = document.getElementById('pseudo-tooltip');
+
+  PSEUDO.forEach((p, i) => {
+    const div = document.createElement('div');
+    div.className = 'pseudo-line';
+    div.id = `pl-${i}`;
+    div.innerHTML = `<span class="ln">${i+1}</span><span class="code">${escHtml(p.code)}</span>`;
+
+    if (p.tip) {
+      div.addEventListener('mouseenter', e => {
+        tip.textContent = p.tip;
+        tip.style.display = 'block';
+        positionTip(e);
+      });
+      div.addEventListener('mousemove', positionTip);
+      div.addEventListener('mouseleave', () => { tip.style.display = 'none'; });
+    }
+    wrap.appendChild(div);
+  });
+}
+
+function positionTip(e) {
+  const tip = document.getElementById('pseudo-tooltip');
+  const TIP_W = 290, TIP_H = 90, GAP = 14;
+  // use clientX/Y which are already viewport coords — perfect for position:fixed
+  let x = e.clientX + GAP;
+  let y = e.clientY + GAP;
+  if (x + TIP_W > window.innerWidth)  x = e.clientX - TIP_W - GAP;
+  if (y + TIP_H > window.innerHeight) y = e.clientY - TIP_H - GAP;
+  if (x < 4) x = 4;
+  if (y < 4) y = 4;
+  tip.style.left = x + 'px';
+  tip.style.top  = y + 'px';
+}
+
+function highlightPseudo(lineIdx) {
+  document.querySelectorAll('.pseudo-line').forEach((el,i)=>{
+    el.classList.toggle('active', i === lineIdx);
+  });
+  const active = document.getElementById(`pl-${lineIdx}`);
+  if (active) active.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+}
+
+// ── HISTORY ──
+const histRows = [];
+function addHistory(idx, s) {
+  if (histRows.find(r=>r.idx===idx)) {
+    // just highlight
+    document.querySelectorAll('#hist-body tr').forEach(tr=>{
+      tr.classList.toggle('hist-active', parseInt(tr.dataset.idx)===idx);
+    });
+    return;
+  }
+  if (histRows.length > 30) {
+    histRows.shift();
+    document.querySelector('#hist-body tr')?.remove();
+  }
+  histRows.push({ idx });
+  const tbody = document.getElementById('hist-body');
+  const tr = document.createElement('tr');
+  tr.dataset.idx = idx;
+  tr.innerHTML = `<td>${idx+1}</td><td>${s.type}</td><td>${s.pivotVal??s.p??'—'}</td><td>${cntCmp}</td>`;
+  tr.onclick = () => { renderStep(parseInt(tr.dataset.idx)); };
+  tbody.appendChild(tr);
+  document.querySelectorAll('#hist-body tr').forEach(row=>{
+    row.classList.toggle('hist-active', parseInt(row.dataset.idx)===idx);
+  });
+  tr.scrollIntoView({ block: 'nearest' });
+}
+
+// ── COUNTERS / STATUS ──
+function updateCounters() {
+  document.getElementById('cnt-cmp').textContent = cntCmp;
+  document.getElementById('cnt-swp').textContent = cntSwp;
+  document.getElementById('cnt-part').textContent = cntPart;
+}
+function updateStatus(s) {
+  const el = document.getElementById('status-lbl');
+  el.textContent = s;
+  const colors = { Idle:'var(--muted)', Ready:'var(--yellow)', Playing:'var(--accent)', Paused:'var(--orange)', 'Done ✅':'var(--green)' };
+  el.style.color = colors[s] || 'var(--text)';
+}
+
+// ── PLAYBACK ──
+function stepFwd() {
+  if (stepIdx < steps.length - 1) { renderStep(stepIdx + 1); }
+  else { updateStatus('Done ✅'); }
+}
+
+function playAnim() {
+  if (animTimer) return;
+  updateStatus('Playing');
+  animTimer = setInterval(() => {
+    if (stepIdx >= steps.length - 1) { clearInterval(animTimer); animTimer = null; updateStatus('Done ✅'); return; }
+    renderStep(stepIdx + 1);
+  }, getSpeed());
+}
+
+function pauseAnim() {
+  if (animTimer) { clearInterval(animTimer); animTimer = null; }
+  updateStatus('Paused');
+}
+
+function resetAll() {
+  if (animTimer) { clearInterval(animTimer); animTimer = null; }
+  steps = []; treeNodes = [];
+  stepIdx = 0; cntCmp = 0; cntSwp = 0; cntPart = 0;
+  updateCounters();
+  document.getElementById('step-counter').textContent = '0 / 0';
+  updateStatus('Idle');
+  document.getElementById('explain-box').innerHTML = 'Click <strong>Build Steps</strong>, then <strong>Step</strong> or <strong>Play</strong>.';
+  document.getElementById('btn-step').disabled = true;
+  document.getElementById('btn-play').disabled = true;
+  document.getElementById('hist-body').innerHTML = '';
+  histRows.length = 0;
+  document.getElementById('pseudo-wrap') && buildPseudo();
+  document.getElementById('bar-svg').innerHTML = '';
+  document.getElementById('tree-svg').innerHTML = '';
+  document.getElementById('call-stack').innerHTML = '<div style="color:var(--muted);font-size:.75rem">No active call</div>';
+  ['ic-k','ic-lo','ic-hi','ic-piv','ic-pivv','ic-res'].forEach(id=>document.getElementById(id).textContent='—');
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  COMPLEXITY CHART (CLO-1)
+// ═══════════════════════════════════════════════════════════════════
+function drawComplexityChart() {
+  const slider = document.getElementById('n-slider');
+  const maxN = parseInt(slider.value);
+  document.getElementById('n-label').textContent = `n=${maxN}`;
+
+  const svg = document.getElementById('cmp-svg');
+  const W = svg.clientWidth || 600;
+  const H = 220;
+  svg.setAttribute('viewBox', `0 0 ${W} ${H}`);
+  svg.innerHTML = '';
+
+  const pad = { t:15, r:20, b:30, l:55 };
+  const pw = W - pad.l - pad.r;
+  const ph = H - pad.t - pad.b;
+
+  // data
+  const ns = [];
+  for (let n = 1; n <= maxN; n += Math.max(1, Math.floor(maxN/80))) ns.push(n);
+
+  const sets = [
+    { label:'O(n) best', color:'var(--green)',  fn: n => n },
+    { label:'E[O(n)] avg', color:'var(--accent)', fn: n => 2.5*n },
+    { label:'O(n log n)', color:'var(--yellow)', fn: n => n*Math.log2(n||1) },
+    { label:'O(n²) worst', color:'var(--red)',   fn: n => n*n/10 },
+  ];
+
+  const allVals = sets.flatMap(s => ns.map(n => s.fn(n)));
+  const maxV = Math.max(...allVals);
+
+  function sx(n) { return pad.l + (n / maxN) * pw; }
+  function sy(v) { return pad.t + ph - (v / maxV) * ph; }
+
+  // axes
+  const axG = document.createElementNS('http://www.w3.org/2000/svg','g');
+
+  // x axis
+  for (let n = 0; n <= maxN; n += Math.max(1, Math.floor(maxN/8))) {
+    const t = document.createElementNS('http://www.w3.org/2000/svg','text');
+    t.setAttribute('x', sx(n)); t.setAttribute('y', H - pad.b + 14);
+    t.setAttribute('text-anchor','middle'); t.setAttribute('font-size','9');
+    t.setAttribute('fill','#475569'); t.textContent = n;
+    svg.appendChild(t);
+  }
+  const xt = document.createElementNS('http://www.w3.org/2000/svg','text');
+  xt.setAttribute('x', pad.l + pw/2); xt.setAttribute('y', H - 2);
+  xt.setAttribute('text-anchor','middle'); xt.setAttribute('font-size','10');
+  xt.setAttribute('fill','#64748b'); xt.textContent = 'n (input size)';
+  svg.appendChild(xt);
+
+  // y axis label
+  const yt = document.createElementNS('http://www.w3.org/2000/svg','text');
+  yt.setAttribute('transform',`rotate(-90,12,${pad.t+ph/2})`);
+  yt.setAttribute('x',12); yt.setAttribute('y', pad.t+ph/2);
+  yt.setAttribute('text-anchor','middle'); yt.setAttribute('font-size','10');
+  yt.setAttribute('fill','#64748b'); yt.textContent = 'Operations';
+  svg.appendChild(yt);
+
+  // gridlines
+  for (let g = 0; g <= 4; g++) {
+    const yp = pad.t + g * ph / 4;
+    const gl = document.createElementNS('http://www.w3.org/2000/svg','line');
+    gl.setAttribute('x1',pad.l); gl.setAttribute('y1',yp);
+    gl.setAttribute('x2',pad.l+pw); gl.setAttribute('y2',yp);
+    gl.setAttribute('stroke','#1e2535'); gl.setAttribute('stroke-width','1');
+    svg.appendChild(gl);
+  }
+
+  // curves
+  sets.forEach(s => {
+    const pts = ns.map(n => `${sx(n)},${sy(s.fn(n))}`).join(' ');
+    const poly = document.createElementNS('http://www.w3.org/2000/svg','polyline');
+    poly.setAttribute('points', pts);
+    poly.setAttribute('fill','none');
+    poly.setAttribute('stroke', s.color);
+    poly.setAttribute('stroke-width','2');
+    svg.appendChild(poly);
+  });
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  TABS
+// ═══════════════════════════════════════════════════════════════════
+function switchTab(id) {
+  document.querySelectorAll('.tab-pane').forEach(p=>p.classList.remove('active'));
+  document.querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  const pane = document.getElementById('tab-'+id);
+  if (pane) pane.classList.add('active');
+  if (event && event.target) event.target.classList.add('active');
+  if (id === 'complexity') setTimeout(drawComplexityChart, 50);
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  EDU ACCORDION
+// ═══════════════════════════════════════════════════════════════════
+function toggleEdu(header) {
+  header.classList.toggle('open');
+  const body = header.nextElementSibling;
+  body.classList.toggle('open');
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  UTILS
+// ═══════════════════════════════════════════════════════════════════
+function escHtml(s) {
+  return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// ═══════════════════════════════════════════════════════════════════
+//  INIT
+// ═══════════════════════════════════════════════════════════════════
+window.addEventListener('DOMContentLoaded', () => {
+  buildPseudo();
+  updateSpeed();
+  drawComplexityChart();
+
+  // redraw on resize
+  window.addEventListener('resize', () => {
+    if (steps.length) drawBars(steps[stepIdx]);
+    drawComplexityChart();
+  });
+});
+</script>
+</body>
+</html>
