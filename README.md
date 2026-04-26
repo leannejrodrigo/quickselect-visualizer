@@ -16,7 +16,7 @@ An interactive visualization tool demonstrating the Quickselect algorithm, along
 - Helps understand recursion and selection process
 
 ## Report
-📄 [View Full Analysis](report/Paradigm Analysis of the Quickselect Algorithm.pdf)
+📄 [View Full Analysis](report/Paradigm_Analysis_of_the_Quickselect_Algorithm.pdf)
 
 ## Technologies Used
 - HTML
